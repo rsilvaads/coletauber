@@ -4,69 +4,78 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.firefox.service import Service
 from selenium import webdriver
-from datetime import datetime 
+from datetime import datetime
 import pandas as pd
 import schedule
 import time
 import sys
 import re
 
-# Define algumas variáveis globais.
-locais = [] 
+# Inicialização de listas e variáveis globais
+locais = []
 coletados = []
-nome_arquivo = 'uber.xlsx'  # Nome do arquivo Excel.
-numero_celular = ''  # Número de celular (para receber o código).
-senha = ''  # Senha da conta Uber.
+nome_arquivo = 'uber.xlsx'  # Nome da planilha do Uber
+numero_celular = ''  # Número de celular (para receber o código de verificação)
+senha = ''  # Senha da conta Uber
 
 # Lê os dados do arquivo Excel para um DataFrame do pandas.
 df_excel_uber = pd.read_excel(nome_arquivo)
-
-# Extrai listas de origens, destinos e horários únicos dos dados do Excel.
-origens = list(dict.fromkeys(df_excel_uber.iloc[1:, 1].tolist()))
-destinos = list(dict.fromkeys(df_excel_uber.iloc[1:, 2].tolist()))
-horarios = list(dict.fromkeys(df_excel_uber.iloc[1:, 3].tolist()))
+origens = list(dict.fromkeys(df_excel_uber.iloc[1:,1].tolist()))
+destinos = list(dict.fromkeys(df_excel_uber.iloc[1:,2].tolist()))
+horarios = list(dict.fromkeys(df_excel_uber.iloc[1:,3].tolist()))
 horarioatual = datetime.now().time().strftime("%H:%M:%S")
 
-# Configura as opções do driver do Firefox, tornando-o "headless" (invisível).
+# Configurações do WebDriver do Firefox, incluindo o modo "headless" (sem interface gráfica)
 options = webdriver.FirefoxOptions()
 options.add_argument('--headless')
 
-# Inicializa o navegador Firefox com as opções especificadas.
+# Inicializa o navegador Firefox com as opções definidas
 browser = webdriver.Firefox(options=options)
-
-# Abre a página inicial do Uber.
 browser.get('https://m.uber.com/looking')
 
-# Define uma função para formatar números de telefone.
+# Definição de função para formatar um número de telefone
 def formataNumero(numero_original):
-    # Código para formatar o número de telefone de acordo com um formato específico.
-    # Retorna o número formatado como uma string.
+    numero_original = str(numero_original)
+    format_string = "({area_code}) {exchange}-{line_number}"
+
+    if len(numero_original) == 11:
+        area_code = numero_original[:2]
+        exchange = numero_original[2:7]
+        line_number = numero_original[7:]
+    else:
+        area_code = numero_original[:2]
+        exchange = numero_original[2:6]
+        line_number = numero_original[6:]
+
+    numero_formatado = format_string.format(area_code=area_code, exchange=exchange, line_number=line_number)
     return str(numero_formatado)
 
-# Define uma função para fazer login no Uber.
+# Definição de função para realizar o login no Uber
 def loginUber():
-    # Define uma função interna para a tela inicial do login.
+
+    # Função interna para preencher a tela inicial com o número de celular
     def telainicial():
-        global codigo
-        # Preenche o número de celular e clica no botão "Avançar".
+        global codigo        
         browser.find_element("id", "PHONE_NUMBER_or_EMAIL_ADDRESS").send_keys(numero_celular)
         browser.find_element("id", "forward-button").click()
 
     for origem in range(len(origens)):
+
         while True:
             try:
+                # Verifica se o campo de número de telefone ou e-mail está presente
                 if browser.find_element("id", "PHONE_NUMBER_or_EMAIL_ADDRESS"):
                     telainicial()
                     time.sleep(10)
                     browser.find_element("id", "PASSWORD").send_keys(senha)
                     browser.find_element("id", "forward-button").click()
-            except NoSuchElementException:
-                # Lida com exceções quando elementos não são encontrados na página.
+            except NoSuchElementException:       
                 try:
                     while True:
                         try:
+                            # Verifica se o código SMS está presente
                             if browser.find_element("id", "PHONE_SMS_OTP-0"):
-                                codigo = input("Digite o código do Uber que chegou no celular " + formataNumero(numero_celular) + " : ")
+                                codigo = input("Digite o código do Uber que chegou no celular "+formataNumero(numero_celular)+" : ")
                                 digitos_codigo = [int(digito) for digito in codigo]
                                 if codigo.isnumeric():
                                     if len(digitos_codigo) == 4 or len(digitos_codigo) == 6:
@@ -79,6 +88,7 @@ def loginUber():
                                     break
                         except:
                             try:
+                                # Verifica se ocorreram muitas tentativas de login
                                 if browser.find_element("xpath", "/html/body/div[5]/div[2]/div/div/div/div/h1"):
                                     print("Muitas tentativas!")
                                     browser.quit()
@@ -138,10 +148,10 @@ def loginUber():
                         print("Deu ruim... Tentando novamente...")
                         browser.quit()
                         telainicial()
-
+                            
                 except NoSuchElementException:
                     break
-
+                
         while True:
             WebDriverWait(browser, 30).until(
                 EC.presence_of_element_located(("xpath", "//input[@placeholder='Add a pickup location']"))
@@ -153,17 +163,20 @@ def loginUber():
         print("Logado no Uber!")
         return True
 
-# Define uma função para realizar a coleta de preços das viagens.
+# Definição de função para realizar a coleta de preços de corridas do Uber
 def fazColeta(origens, destinos):
     global coletados
     for i in range(len(origens)):
 
+        # Função interna para enviar o local (origem ou destino)
         def enviar(caminho):
             try:
-                browser.find_element("xpath", "//p[@contains(text(), '{caminho}')]").click()
+                browser.find_element("xpath", "//p
+
+[@contains(text(), '{caminho}')]").click()
             except:
                 browser.find_element("xpath", "/html/body/div[1]/div/div/div[1]/div/div[2]/div[2]/div/span/div/div[3]/ul/li[1]/div[1]").click()
-
+                
         origem = browser.find_element("xpath", "//input[@placeholder='Add a pickup location']")
         destino = browser.find_element("xpath", "//input[@placeholder='Enter your destination']")
 
@@ -175,17 +188,17 @@ def fazColeta(origens, destinos):
         destino.send_keys(destinos[i])
         time.sleep(3)
         enviar(destinos[i])
-        time.sleep(3)
+        time.sleep(3)      
 
         try:
             try:
-                if browser.find_element("xpath", "/html/body/div[1]/div/div/div[1]/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[2]"):
-                    precos = browser.find_element("xpath", "/html/body/div[1]/div/div/div[1]/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[2]").text
+                if browser.find_element("xpath", "/html/body/div[1]/div/div/div/1/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[2]"):
+                    precos = browser.find_element("xpath", "/html/body/div[1]/div/div/div/1/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[2]").text
 
             except:
                 if browser.find_element("xpath", "/html/body/div[1]/div/div/div/1/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[1]"):
                     precos = browser.find_element("xpath", "/html/body/div[1]/div/div/div/1/div/div[2]/div[2]/div/span/div/div[3]/div/ul/li[1]/div[2]/div[2]/div/p[1]").text
-
+                
             coletados.append(precos)
 
             origem.clear()
@@ -199,13 +212,12 @@ def fazColeta(origens, destinos):
 
     return coletados
 
-# Define uma função para definir os locais coletados no DataFrame do Excel.
+# Define uma função para definir os locais coletados no DataFrame
 def set_locais(df_excel_uber, date, time, dicionario):
     for rota in dicionario.keys():
-        df_excel_uber.loc[(df_excel_uber['Horário'] == time) & (df_excel_uber['Origem'].iloc[1:, ] == rota),
-                          df_excel_uber.iloc[0] == datetime.strptime(date, '%Y-%m-%d')] = dicionario[rota]
+        df_excel_uber.loc[(df_excel_uber['Horário'] == time) & (df_excel_uber['Origem'].iloc[1:,] == rota), df_excel_uber.iloc[0] == datetime.strptime(date, '%Y-%m-%d')] = dicionario[rota]
 
-# Define uma função para realizar a coleta de dados.
+# Definição de função para realizar a coleta de preços em um horário específico
 def coleta(horario):
     global locais
     global coletados
@@ -220,25 +232,26 @@ def coleta(horario):
     with pd.ExcelWriter(nome_arquivo, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
         df_excel_uber.to_excel(writer, header=False, index=False)
 
-    print("Coleta feita às: " + str(horarioatual))
+    print("Coleta feitas às: "+str(horarioatual))
     coletados = []
 
-# Define uma função para agendar as coletas em horários específicos.
+# Definição de função para agendar as coletas em horários específicos
 def defineColetas():
-    # Agenda as coletas para os horários especificados.
+    # Está agendando quatro coletas diferentes, uma para cada horário. Pode ser otimizado.
     schedule.every().day.at(horarios[0]).do(coleta, horarios[0])
     schedule.every().day.at(horarios[1]).do(coleta, horarios[1])
     schedule.every().day.at(horarios[2]).do(coleta, horarios[2])
     schedule.every().day.at(horarios[3]).do(coleta, horarios[3])
 
-# Função principal do programa.
+# Função principal que inicia o processo de login e agendamento de coletas
 def main():
     loginUber()
     while True:
         defineColetas()
         schedule.run_pending()
-        time.sleep(60)  # Espera 60 segundos antes de verificar as tarefas agendadas novamente.
+        # def formataPlanilha
+        # def enviaGoogleDrive
+        time.sleep(60)
 
 if __name__ == "__main__":
     main()
-
